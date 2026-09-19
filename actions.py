@@ -1,44 +1,51 @@
-import os
-import pwd
+import json
 import subprocess
 from pathlib import Path
+from urllib.parse import quote
 
 
-SHORTCUT_NAME = "MacTap Action"
+PROJECT_DIR = Path(__file__).resolve().parent
+CONFIG_FILE = PROJECT_DIR / "config.json"
+AUDIO_FILE = PROJECT_DIR / "sounds" / "triple_tap.mp3"
 
-AUDIO_FILE = (
-    Path(__file__).resolve().parent
-    / "sounds"
-    / "triple_tap.mp3"
-)
+
+def load_config():
+    try:
+        with open(CONFIG_FILE, "r") as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"shortcut_name": "MacTap Action"}
 
 
 def get_console_user():
-    username = subprocess.check_output(
+    return subprocess.check_output(
         ["/usr/bin/stat", "-f", "%Su", "/dev/console"],
         text=True
     ).strip()
 
-    user_info = pwd.getpwnam(username)
 
-    return username, user_info.pw_uid
+def get_console_uid(username):
+    return subprocess.check_output(
+        ["/usr/bin/id", "-u", username],
+        text=True
+    ).strip()
 
 
 def run_as_user(command):
-    """
-    Run a macOS user action as the currently logged-in user.
-    The detector itself runs as root because the accelerometer
-    requires elevated access.
-    """
-    username, _ = get_console_user()
+    username = get_console_user()
+    uid = get_console_uid(username)
 
     return subprocess.Popen(
         [
-            "/usr/bin/sudo",
-            "-u",
-            username,
+            "/bin/launchctl",
+            "asuser",
+            uid,
             *command,
-        ]
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
     )
 
 
@@ -47,19 +54,48 @@ def single_tap():
 
 
 def double_tap():
-    print(f"DOUBLE TAP → Running Shortcut: {SHORTCUT_NAME}")
+    config = load_config()
+    shortcut_name = config.get(
+        "shortcut_name",
+        "MacTap Action"
+    )
 
-    run_as_user([
-        "/usr/bin/shortcuts",
-        "run",
-        SHORTCUT_NAME,
-    ])
+    print(
+        f"DOUBLE TAP → Running Shortcut: "
+        f"{shortcut_name}"
+    )
+
+    # Apple-supported Shortcuts URL scheme.
+    encoded_name = quote(
+        shortcut_name,
+        safe=""
+    )
+
+    url = (
+        "shortcuts://run-shortcut"
+        f"?name={encoded_name}"
+    )
+
+    try:
+        run_as_user([
+            "/usr/bin/open",
+            url,
+        ])
+    except Exception as error:
+        print(
+            f"Shortcut launch error: {error}"
+        )
 
 
 def triple_tap():
-    print("TRIPLE TAP → Playing audio")
+    print("TRIPLE TAP → Playing voice")
 
-    run_as_user([
-        "/usr/bin/afplay",
-        str(AUDIO_FILE),
-    ])
+    try:
+        run_as_user([
+            "/usr/bin/afplay",
+            str(AUDIO_FILE),
+        ])
+    except Exception as error:
+        print(
+            f"Audio launch error: {error}"
+        )
