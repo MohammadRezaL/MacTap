@@ -10,6 +10,7 @@ import rumps
 
 
 PROJECT_DIR = os.path.expanduser("~/MacTap")
+MENU_BAR_ICON = os.path.join(PROJECT_DIR, "assets", "MacTapMenuBarTemplate.png")
 PYTHON = os.path.join(PROJECT_DIR, ".venv", "bin", "python")
 DETECTOR = os.path.join(PROJECT_DIR, "detector.py")
 LOG_FILE = os.path.join(PROJECT_DIR, "mactap.log")
@@ -33,7 +34,7 @@ def save_config(config):
 class MacTapApp(rumps.App):
 
     def __init__(self):
-        super().__init__("MacTap")
+        super().__init__("MacTap", icon=MENU_BAR_ICON, template=True)
 
         config = load_config()
         shortcut = config.get("shortcut_name", "MacTap Action")
